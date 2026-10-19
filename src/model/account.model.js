@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const LEDGER = require("./ledger.model");
+
 
 const accountSchema = mongoose.Schema({
     user: {
@@ -32,6 +34,50 @@ const accountSchema = mongoose.Schema({
 /*
 balance is never hardcoded in schema generally. It generally implemented using ledger
 */
+
+accountSchema.methods.getBalance = async function () {
+    const balance = await LEDGER.aggregate([
+        {
+            $match: {
+                account: this._id
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalDebit: {
+                    $sum: {
+                        $cond: [
+                            { $eq: ["$type", "DEBIT"] },
+                            "$amount",
+                            0
+                        ]
+                    }
+                },
+                totalCredit: {
+                    $sum: {
+                        $cond: [
+                            { $eq: ["$type", "CREDIT"] },
+                            "$amount",
+                            0
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                _id: 0,
+                balance: { $subtract: ["$totalCredit", "$totalDebit"] }
+            }
+        }
+    ]);
+    if (balance.length == 0) {
+        return 0;
+    }
+
+    return balance[0]?.balance;
+}
 
 accountSchema.index({ user: 1, status: 1 });
 
